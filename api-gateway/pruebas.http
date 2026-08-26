@@ -1,0 +1,29 @@
+# For more info on HTTP files go to https://aka.ms/vs/httpfile
+# ==========================================
+# Configuración de Variables
+# ==========================================
+@ApiGateway = http://localhost:5035
+@ContentType = application/json
+
+### 1. Obtener todos los pacientes (vía Gateway)
+GET {{ApiGateway}}/api/pacientes/pacientes
+Accept: {{ContentType}}
+
+### 2. Obtener paciente por ID
+GET {{ApiGateway}}/api/pacientes/1
+Accept: {{ContentType}}
+
+### 3. Crear un nuevo paciente (Dispara evento RabbitMQ)
+POST {{ApiGateway}}/api/pacientes/crear
+Content-Type: {{ContentType}}
+
+{
+  "cedula": "1712345678",
+  "nombre": "Juan",
+  "apellido": "Pérez",
+  "direccion": "Av. Amazonas y Colón"
+}
+
+### 4. Consultar historiales médicos creados automáticamente por evento
+GET {{ApiGateway}}/api/historiales/paciente/1
+Accept: {{ContentType}}

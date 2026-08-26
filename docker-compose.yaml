@@ -1,0 +1,97 @@
+version: "3.8"
+
+networks:
+  distribuidos-network:
+    driver: bridge
+
+services:
+  # ==========================================
+  # BROKER DE MENSAJERÍA (RabbitMQ)
+  # ==========================================
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: rabbitmqB-compose
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: Daredevil12
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - distribuidos-network
+
+  # ==========================================
+  # MICROSERVICIO PACIENTES
+  # ==========================================
+  paciente:
+    build:
+      context: ./api-pacientes
+      dockerfile: Dockerfile
+    container_name: pacienteB-api-compose
+    ports:
+      - "5001:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__PacienteConnection: "Server=host.docker.internal,1433;Database=pacienteDatabase;User Id=sa;Password=Daredevil12;TrustServerCertificate=True;"
+      RabbitMQ__HostName: rabbitmq
+      RabbitMQ__Port: 5672
+      RabbitMQ__UserName: guest
+      RabbitMQ__Password: Daredevil12
+      RabbitMQ__QueueName: pacientes_creados_queue
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - distribuidos-network
+
+  # ==========================================
+  # MICROSERVICIO HISTORIAL CLÍNICO
+  # ==========================================
+  historial:
+    build:
+      context: ./api-historiasClinicas
+      dockerfile: Dockerfile
+    container_name: historialB-api-compose
+    ports:
+      - "5002:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__HistorialConnection: "Server=host.docker.internal,1433;Database=historialDatabase;User Id=sa;Password=Daredevil12;TrustServerCertificate=True;"
+      RabbitMQ__HostName: rabbitmq
+      RabbitMQ__Port: 5672
+      RabbitMQ__UserName: guest
+      RabbitMQ__Password: Daredevil12
+      RabbitMQ__QueueName: pacientes_creados_queue
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - distribuidos-network
+
+  # ==========================================
+  # API GATEWAY (YARP)
+  # ==========================================
+  apigateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: apigatewayB-compose
+    ports:
+      - "5000:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://+:8080"
+      ReverseProxy__Clusters__pacientes-cluster__Destinations__destination1__Address: "http://paciente:8080/"
+      ReverseProxy__Clusters__historiales-cluster__Destinations__destination1__Address: "http://historial:8080/"
+    depends_on:
+      - paciente
+      - historial
+    networks:
+      - distribuidos-network

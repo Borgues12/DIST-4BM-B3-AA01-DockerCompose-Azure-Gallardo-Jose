@@ -1,0 +1,257 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "api-historiasClinicas",
+    "version": "1.0"
+  },
+  "paths": {
+    "/api/historiales/historiales": {
+      "get": {
+        "tags": [
+          "historiales"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HistorialClinico"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HistorialClinico"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HistorialClinico"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/historiales/paciente/{idPaciente}": {
+      "get": {
+        "tags": [
+          "historiales"
+        ],
+        "parameters": [
+          {
+            "name": "idPaciente",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HistorialClinico"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HistorialClinico"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HistorialClinico"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/historiales/crear": {
+      "post": {
+        "tags": [
+          "historiales"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HistorialClinico"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HistorialClinico"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/HistorialClinico"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistorialClinico"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistorialClinico"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistorialClinico"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/historiales/actualizar/{id}": {
+      "put": {
+        "tags": [
+          "historiales"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HistorialClinico"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HistorialClinico"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/HistorialClinico"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/historiales/{idEliminar}": {
+      "delete": {
+        "tags": [
+          "historiales"
+        ],
+        "parameters": [
+          {
+            "name": "idEliminar",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HistorialClinico": {
+        "required": [
+          "diagnostico",
+          "idPaciente",
+          "numHistoria"
+        ],
+        "type": "object",
+        "properties": {
+          "idHistorialClinico": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "idPaciente": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "numHistoria": {
+            "maxLength": 50,
+            "minLength": 0,
+            "type": "string"
+          },
+          "diagnostico": {
+            "maxLength": 500,
+            "minLength": 0,
+            "type": "string"
+          },
+          "tratamiento": {
+            "maxLength": 500,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "historiales"
+    }
+  ]
+}
