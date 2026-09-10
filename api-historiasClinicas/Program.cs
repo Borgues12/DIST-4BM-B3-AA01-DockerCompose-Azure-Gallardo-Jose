@@ -4,6 +4,7 @@ using api_historiasClinicas.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using System.Text;
 
 namespace api_historiasClinicas
@@ -40,7 +41,21 @@ namespace api_historiasClinicas
             // -----------------------------------------------------------------
 
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen(); // opcional: agrégale el SecurityDefinition igual que en api_pacientes
+            builder.Services.AddSwaggerGen(options =>
+            {
+                options.AddSecurityDefinition("bearer", new OpenApiSecurityScheme
+                {
+                    Type = SecuritySchemeType.Http,
+                    Scheme = "bearer",
+                    BearerFormat = "JWT",
+                    Description = "Ingrese el token JWT"
+                });
+
+                options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+                {
+                    [new OpenApiSecuritySchemeReference("bearer", document)] = []
+                });
+            });
             builder.Services.AddHostedService<RabbitMQConsumer>();
 
             var app = builder.Build();
