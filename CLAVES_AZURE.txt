@@ -1,0 +1,39 @@
+════════════════════════════════════════
+ CLAVES_AZURE_EJEMPLO.txt
+ Sistema Clinico Distribuido — Gallardo
+ (placeholders — sin valores reales)
+════════════════════════════════════════
+
+▸ RECURSOS
+  RG            = <rg-nombre>
+  ACR_NAME      = <acr-nombre>
+  SQL_SERVER    = <servidor>.database.windows.net
+
+▸ AZURE SQL
+  SQL_ADMIN     = <usuario-admin>
+  SQL_PASSWORD  = <password-segura>
+
+▸ CADENAS DE CONEXION
+  PacienteConnection = Server=tcp:<servidor>,1433;Database=pacienteDatabase;
+                        User ID=<usuario-admin>;Password=<password-segura>;
+                        Encrypt=true;TrustServerCertificate=false;
+
+  HCConnection        = Server=tcp:<servidor>,1433;Database=historialDatabase;
+                        User ID=<usuario-admin>;Password=<password-segura>;
+                        Encrypt=true;TrustServerCertificate=false;
+
+▸ SERVICIO OAuthJWT
+  Jwt__Issuer   = OAuthJWT
+  Jwt__Audience = ApiClinica
+  Jwt__Key      = <clave-secreta-32+caracteres>
+  Jwt__Expire   = 60 (min)
+
+▸ RABBITMQ
+  RABBITMQ_USER = <usuario>
+  RABBITMQ_PASS = <password>
+
+────────────────────────────────────────
+Nota: reemplazar cada placeholder solo en
+.env local o en --env-vars de Azure.
+Nunca subir valores reales al repo.
+────────────────────────────────────────

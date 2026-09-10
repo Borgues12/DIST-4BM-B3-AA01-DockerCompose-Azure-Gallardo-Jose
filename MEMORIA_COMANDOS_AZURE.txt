@@ -1,0 +1,180 @@
+MEMORIA_COMANDOS_AZURE.txt
+Historial de comandos Azure CLI - Proyecto Sistema Clinico Distribuido (Gallardo)
+(Los valores sensibles se muestran como placeholders. Los valores reales
+solo existieron en la terminal local / variables de entorno, nunca aqui.)
+
+0. VARIABLES DE ENTORNO BASE
+------------------------------
+RG="rg-clinico-gallardo"
+ACR_NAME="acrclinicogallardo"
+SQL_SERVER="sqlclinico-jgallardo-09"
+SQL_LOCATION="centralus"
+SQL_ADMIN="sqladminuser"
+SQL_PASSWORD="<TU_PASSWORD_SEGURA>"
+ENV_NAME="env-clinico-vnet"
+LOCATION="eastus"
+
+echo $RG $ACR_NAME $SQL_SERVER
+
+1. REGISTRO DE PROVEEDORES (RESOURCE PROVIDERS)
+--------------------------------------------------
+az provider register --namespace Microsoft.ContainerRegistry
+az provider show --namespace Microsoft.ContainerRegistry --query registrationState -o tsv
+
+az provider register --namespace Microsoft.Sql
+az provider register --namespace Microsoft.App
+az provider register --namespace Microsoft.OperationalInsights
+
+2. AZURE CONTAINER REGISTRY (ACR)
+-------------------------------------
+az acr create --resource-group $RG --name $ACR_NAME --sku Basic --admin-enabled true
+
+3. CLONADO DEL REPOSITORIO
+------------------------------
+git clone https://github.com/Borgues12/DIST-4BM-B3-AA01-DockerCompose-Azure-Gallardo-Jose.git
+cd sistema-clinico-distribuido
+ls
+
+4. BUILD Y PUSH DE IMAGENES (build remoto en ACR)
+-----------------------------------------------------
+az acr build --registry $ACR_NAME --image oauthjwt:v1 ./OAuthJWT
+REM Repetir el mismo patron para cada servicio:
+REM az acr build --registry $ACR_NAME --image api-pacientes:v1 ./ApiPacientes
+REM az acr build --registry $ACR_NAME --image api-historiasclinicas:v3 ./ApiHistoriasClinicas
+REM az acr build --registry $ACR_NAME --image gateway:v1 ./Gateway
+
+5. AZURE SQL SERVER Y BASES DE DATOS
+----------------------------------------
+az sql server create --name $SQL_SERVER --resource-group $RG \
+  --location $SQL_LOCATION --admin-user $SQL_ADMIN --admin-password $SQL_PASSWORD
+
+az sql server firewall-rule create --resource-group $RG --server $SQL_SERVER \
+  --name AllowAzureServices --start-ip-address 0.0.0.0 --end-ip-address 0.0.0.0
+
+az sql db create --resource-group $RG --server $SQL_SERVER \
+  --name pacienteDatabase --service-objective Basic
+
+az sql db create --resource-group $RG --server $SQL_SERVER \
+  --name historialDatabase --service-objective Basic
+
+6. RED VIRTUAL (VNET) PARA EL ENTORNO DE CONTAINER APPS
+------------------------------------------------------------
+az network vnet create \
+  --resource-group $RG \
+  --name vnet-clinico \
+  --address-prefix 10.0.0.0/16 \
+  --subnet-name subnet-containerapps \
+  --subnet-prefixes 10.0.0.0/23
+
+SUBNET_ID=$(az network vnet subnet show \
+  --resource-group $RG \
+  --vnet-name vnet-clinico \
+  --name subnet-containerapps \
+  --query id -o tsv)
+
+az containerapp env create \
+  --name env-clinico-vnet \
+  --resource-group $RG \
+  --location eastus \
+  --infrastructure-subnet-resource-id $SUBNET_ID
+
+7. CREDENCIALES DEL ACR (PARA LOS CONTAINER APPS)
+-------------------------------------------------------
+ACR_SERVER=$(az acr show --name $ACR_NAME --query loginServer -o tsv)
+ACR_USER=$(az acr credential show --name $ACR_NAME --query username -o tsv)
+ACR_PASS=$(az acr credential show --name $ACR_NAME --query "passwords[0].value" -o tsv)
+
+echo $ACR_SERVER
+echo $ACR_USER
+
+8. DESPLIEGUE DE LOS 5 COMPONENTES
+----------------------------------------
+
+8.1 Servicio OAuthJWT
+az containerapp create --name oauthjwt --resource-group $RG --environment $ENV_NAME \
+  --image $ACR_SERVER/oauthjwt:v1 \
+  --registry-server $ACR_SERVER --registry-username $ACR_USER --registry-password $ACR_PASS \
+  --target-port 8080 --ingress internal \
+  --min-replicas 0 --max-replicas 1 \
+  --env-vars Jwt__Issuer="OAuthJWT" Jwt__Audience="ApiClinica" Jwt__Key="<TU_JWT_KEY_DE_32_CARACTERES_O_MAS>" Jwt__ExpireMinutes="60"
+
+REM Actualizacion posterior de variables (ejemplo real de ajuste de Issuer/Audience):
+az containerapp update --name oauthjwt --resource-group $RG \
+  --set-env-vars Jwt__Issuer="OAuthJWT" Jwt__Audience="ApiClinica" Jwt__Key="<TU_JWT_KEY_DE_32_CARACTERES_O_MAS>" Jwt__ExpireMinutes="60"
+
+8.2 RabbitMQ
+az containerapp create --name rabbitmq --resource-group $RG --environment $ENV_NAME \
+  --image rabbitmq:4-management \
+  --target-port 5672 --exposed-port 5672 --ingress internal --transport tcp \
+  --min-replicas 1 --max-replicas 1 \
+  --env-vars RABBITMQ_DEFAULT_USER="<RABBITMQ_USER>" RABBITMQ_DEFAULT_PASS="<RABBITMQ_PASS>"
+
+8.3 API Pacientes (microservicio 1)
+az containerapp create \
+  --name api-pacientes \
+  --resource-group $RG \
+  --environment env-clinico-vnet \
+  --image acrclinicogallardo.azurecr.io/api-pacientes:v1 \
+  --target-port 8080 \
+  --ingress internal \
+  --min-replicas 1 --max-replicas 1 \
+  --cpu 0.5 --memory 1Gi \
+  --registry-server acrclinicogallardo.azurecr.io \
+  --env-vars \
+    "RabbitMQ__HostName=$RABBITMQ_FQDN" \
+    "RabbitMQ__Port=5672" \
+    "RabbitMQ__UserName=<RABBITMQ_USER>" \
+    "RabbitMQ__Password=<RABBITMQ_PASS>" \
+    "RabbitMQ__QueueName=pacientes_creados_queue" \
+    "RabbitMQ__UpdateQueueName=pacientes_actualizados_queue" \
+    "ConnectionStrings__PacienteConnection=Server=tcp:$SQL_SERVER.database.windows.net,1433;Database=pacienteDatabase;User ID=$SQL_ADMIN;Password=<TU_PASSWORD_SEGURA>;Encrypt=true;TrustServerCertificate=false;Connection Timeout=30" \
+    "Jwt__Issuer=OAuthJWT" \
+    "Jwt__Audience=ApiClinica" \
+    "Jwt__Key=<TU_JWT_KEY_DE_32_CARACTERES_O_MAS>"
+
+8.4 API Historias Clinicas (microservicio 2)
+az containerapp create \
+  --name api-historiasclinicas \
+  --resource-group $RG \
+  --environment env-clinico \
+  --image acrclinicogallardo.azurecr.io/api-historiasclinicas:v3 \
+  --target-port 8080 \
+  --ingress internal \
+  --min-replicas 1 --max-replicas 1 \
+  --cpu 0.5 --memory 1Gi \
+  --registry-server acrclinicogallardo.azurecr.io \
+  --env-vars \
+    "RabbitMQ__HostName=rabbitmq.internal.jollystone-f8f3ed4e.eastus.azurecontainerapps.io" \
+    "RabbitMQ__Port=5672" \
+    "RabbitMQ__UserName=<RABBITMQ_USER>" \
+    "RabbitMQ__Password=<RABBITMQ_PASS>" \
+    "RabbitMQ__QueueName=pacientes_creados_queue" \
+    "RabbitMQ__UpdateQueueName=pacientes_actualizados_queue" \
+    "ConnectionStrings__HCConnection=Server=tcp:$SQL_SERVER.database.windows.net,1433;Database=historialDatabase;User ID=$SQL_ADMIN;Password=<TU_PASSWORD_SEGURA>;Encrypt=true;TrustServerCertificate=false;Connection Timeout=30" \
+    "Jwt__Issuer=OAuthJWT" \
+    "Jwt__Audience=ApiClinica" \
+    "Jwt__Key=<TU_JWT_KEY_DE_32_CARACTERES_O_MAS>"
+
+8.5 API Gateway
+az containerapp create --name gateway --resource-group $RG --environment $ENV_NAME \
+  --image $ACR_SERVER/gateway:v1 \
+  --registry-server $ACR_SERVER --registry-username $ACR_USER --registry-password $ACR_PASS \
+  --target-port 8080 --ingress external \
+  --min-replicas 0 --max-replicas 1 \
+  --env-vars \
+    ReverseProxy__Clusters__oauthjwt-cluster__Destinations__destination1__Address="https://oauthjwt.internal.jollystone-f8f3ed4e.eastus.azurecontainerapps.io" \
+    ReverseProxy__Clusters__pacientes-cluster__Destinations__destination1__Address="https://api-pacientes.internal.jollystone-f8f3ed4e.eastus.azurecontainerapps.io" \
+    ReverseProxy__Clusters__historiales-cluster__Destinations__destination1__Address="https://api-historiasclinicas.internal.jollystone-f8f3ed4e.eastus.azurecontainerapps.io"
+
+9. EXPOSICION DE INGRESS EXTERNO (AJUSTE PUNTUAL)
+-------------------------------------------------------
+az containerapp ingress enable --name api-pacientes --resource-group rg-clinico-gallardo \
+  --type external --target-port 8080 --transport auto
+
+10. LIMPIEZA FINAL (OBLIGATORIA DESPUES DE LA REVISION)
+-------------------------------------------------------------
+az group delete --name $RG --yes --no-wait
+
+NOTA DE SEGURIDAD: los placeholders <TU_PASSWORD_SEGURA>, <TU_JWT_KEY_...>,
+<RABBITMQ_USER> y <RABBITMQ_PASS> deben reemplazarse solo en la terminal al
+ejecutar los comandos, nunca en este archivo ni en el repositorio.
