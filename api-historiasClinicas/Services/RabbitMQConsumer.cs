@@ -30,16 +30,63 @@ namespace api_historiasClinicas.Services
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            // Reintenta conectar indefinidamente con backoff, en vez de morir al primer fallo.
+            var delay = TimeSpan.FromSeconds(2);
+            var maxDelay = TimeSpan.FromSeconds(30);
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await ConectarYConsumirAsync(stoppingToken);
+
+                    // Si ConectarYConsumirAsync retorna normalmente es porque
+                    // stoppingToken se canceló (shutdown esperado).
+                    break;
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Error conectando/consumiendo de RabbitMQ. Reintentando en {Delay}s...",
+                        delay.TotalSeconds);
+
+                    await LimpiarConexionAsync();
+
+                    try
+                    {
+                        await Task.Delay(delay, stoppingToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+
+                    // Backoff exponencial con techo de 30s
+                    delay = TimeSpan.FromSeconds(Math.Min(delay.TotalSeconds * 2, maxDelay.TotalSeconds));
+                }
+            }
+        }
+
+        private async Task ConectarYConsumirAsync(CancellationToken stoppingToken)
+        {
             var factory = new ConnectionFactory
             {
                 HostName = _configuration["RabbitMQ:HostName"],
                 Port = int.Parse(_configuration["RabbitMQ:Port"]!),
                 UserName = _configuration["RabbitMQ:UserName"],
-                Password = _configuration["RabbitMQ:Password"]
+                Password = _configuration["RabbitMQ:Password"],
+                AutomaticRecoveryEnabled = true,
+                NetworkRecoveryInterval = TimeSpan.FromSeconds(5)
             };
 
-            _connection = await factory.CreateConnectionAsync();
-            _channel = await _connection.CreateChannelAsync();
+            _connection = await factory.CreateConnectionAsync(stoppingToken);
+            _channel = await _connection.CreateChannelAsync(cancellationToken: stoppingToken);
+
+            _logger.LogInformation("Conectado a RabbitMQ correctamente.");
 
             var queueName = _configuration["RabbitMQ:QueueName"]!;
             var queueNameUpdate = _configuration["RabbitMQ:UpdateQueueName"]!;
@@ -49,10 +96,12 @@ namespace api_historiasClinicas.Services
                 durable: true,
                 exclusive: false,
                 autoDelete: false,
-                arguments: null
+                arguments: null,
+                cancellationToken: stoppingToken
             );
             await _channel.QueueDeclareAsync(
-                queue: queueNameUpdate, durable: true, exclusive: false, autoDelete: false, arguments: null);
+                queue: queueNameUpdate, durable: true, exclusive: false, autoDelete: false,
+                arguments: null, cancellationToken: stoppingToken);
 
             var consumer = new AsyncEventingBasicConsumer(_channel);
 
@@ -99,7 +148,7 @@ namespace api_historiasClinicas.Services
                     }
                 }
 
-                await _channel.BasicAckAsync(
+                await _channel!.BasicAckAsync(
                     deliveryTag: ea.DeliveryTag,
                     multiple: false
                 );
@@ -110,7 +159,7 @@ namespace api_historiasClinicas.Services
             {
                 var body = ea.Body.ToArray();
                 var mensaje = Encoding.UTF8.GetString(body);
-                var evento = JsonSerializer.Deserialize<PacienteCreadoEvento>(mensaje); // reutilizas el mismo DTO si tiene IdPaciente
+                var evento = JsonSerializer.Deserialize<PacienteCreadoEvento>(mensaje);
 
                 if (evento != null)
                 {
@@ -120,22 +169,49 @@ namespace api_historiasClinicas.Services
                     );
                 }
 
-                await _channel.BasicAckAsync(deliveryTag: ea.DeliveryTag, multiple: false);
+                await _channel!.BasicAckAsync(deliveryTag: ea.DeliveryTag, multiple: false);
             };
 
             await _channel.BasicConsumeAsync(
                 queue: queueName,
                 autoAck: false,
-                consumer: consumer
+                consumer: consumer,
+                cancellationToken: stoppingToken
             );
 
             await _channel.BasicConsumeAsync(
-                queue: queueNameUpdate, autoAck: false, consumer: consumerUpdate);
+                queue: queueNameUpdate, autoAck: false, consumer: consumerUpdate,
+                cancellationToken: stoppingToken);
 
-            await Task.Delay(
-                Timeout.Infinite,
-                stoppingToken
-            );
+            // Se queda vivo hasta que cancelen el servicio o se rompa la conexión
+            // (AutomaticRecoveryEnabled intentará reconectar transparentemente;
+            // si falla del todo, la excepción sube y el loop externo reintenta desde cero).
+            await Task.Delay(Timeout.Infinite, stoppingToken);
+        }
+
+        private Task LimpiarConexionAsync()
+        {
+            try
+            {
+                _channel?.Dispose();
+                _connection?.Dispose();
+            }
+            catch
+            {
+                // Ignorar errores al limpiar conexión rota
+            }
+            finally
+            {
+                _channel = null;
+                _connection = null;
+            }
+            return Task.CompletedTask;
+        }
+
+        public override async Task StopAsync(CancellationToken cancellationToken)
+        {
+            await LimpiarConexionAsync();
+            await base.StopAsync(cancellationToken);
         }
     }
 }
