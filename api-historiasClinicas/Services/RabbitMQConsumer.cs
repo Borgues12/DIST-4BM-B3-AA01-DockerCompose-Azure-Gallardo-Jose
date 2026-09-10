@@ -42,6 +42,7 @@ namespace api_historiasClinicas.Services
             _channel = await _connection.CreateChannelAsync();
 
             var queueName = _configuration["RabbitMQ:QueueName"]!;
+            var queueNameUpdate = _configuration["RabbitMQ:UpdateQueueName"]!;
 
             await _channel.QueueDeclareAsync(
                 queue: queueName,
@@ -50,6 +51,8 @@ namespace api_historiasClinicas.Services
                 autoDelete: false,
                 arguments: null
             );
+            await _channel.QueueDeclareAsync(
+                queue: queueNameUpdate, durable: true, exclusive: false, autoDelete: false, arguments: null);
 
             var consumer = new AsyncEventingBasicConsumer(_channel);
 
@@ -102,11 +105,32 @@ namespace api_historiasClinicas.Services
                 );
             };
 
+            var consumerUpdate = new AsyncEventingBasicConsumer(_channel);
+            consumerUpdate.ReceivedAsync += async (sender, ea) =>
+            {
+                var body = ea.Body.ToArray();
+                var mensaje = Encoding.UTF8.GetString(body);
+                var evento = JsonSerializer.Deserialize<PacienteCreadoEvento>(mensaje); // reutilizas el mismo DTO si tiene IdPaciente
+
+                if (evento != null)
+                {
+                    _logger.LogInformation(
+                        " > Evento PacienteActualizado recibido. IdPaciente: {IdPaciente} - No se requiere acción sobre HistorialClinico",
+                        evento.IdPaciente
+                    );
+                }
+
+                await _channel.BasicAckAsync(deliveryTag: ea.DeliveryTag, multiple: false);
+            };
+
             await _channel.BasicConsumeAsync(
                 queue: queueName,
                 autoAck: false,
                 consumer: consumer
             );
+
+            await _channel.BasicConsumeAsync(
+                queue: queueNameUpdate, autoAck: false, consumer: consumerUpdate);
 
             await Task.Delay(
                 Timeout.Infinite,

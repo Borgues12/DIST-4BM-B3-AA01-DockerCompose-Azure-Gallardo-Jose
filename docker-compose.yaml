@@ -5,9 +5,6 @@ networks:
     driver: bridge
 
 services:
-  # ==========================================
-  # BROKER DE MENSAJERÍA (RabbitMQ)
-  # ==========================================
   rabbitmq:
     image: rabbitmq:4-management
     container_name: rabbitmqB-compose
@@ -25,9 +22,23 @@ services:
     networks:
       - distribuidos-network
 
-  # ==========================================
-  # MICROSERVICIO PACIENTES
-  # ==========================================
+  oauthjwt:
+    build:
+      context: ./OAuthJWT
+      dockerfile: Dockerfile
+    container_name: oauthjwtB-compose
+    ports:
+      - "5003:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://+:8080"
+      Jwt__Key: "ArthurCurry.Aquaman.12_HalJordan.LinternaVerde.6"
+      Jwt__Issuer: "OAuthJWT"
+      Jwt__Audience: "ApiClinica"
+      Jwt__ExpireMinutes: 60
+    networks:
+      - distribuidos-network
+
   paciente:
     build:
       context: ./api-pacientes
@@ -44,15 +55,17 @@ services:
       RabbitMQ__UserName: guest
       RabbitMQ__Password: Daredevil12
       RabbitMQ__QueueName: pacientes_creados_queue
+      RabbitMQ__UpdateQueueName: pacientes_actualizados_queue
+      Jwt__Key: "ArthurCurry.Aquaman.12_HalJordan.LinternaVerde.6"
+      Jwt__Issuer: "OAuthJWT"
+      Jwt__Audience: "ApiClinica"
+      Jwt__ExpireMinutes: 60
     depends_on:
       rabbitmq:
         condition: service_healthy
     networks:
       - distribuidos-network
 
-  # ==========================================
-  # MICROSERVICIO HISTORIAL CLÍNICO
-  # ==========================================
   historial:
     build:
       context: ./api-historiasClinicas
@@ -69,15 +82,17 @@ services:
       RabbitMQ__UserName: guest
       RabbitMQ__Password: Daredevil12
       RabbitMQ__QueueName: pacientes_creados_queue
+      RabbitMQ__UpdateQueueName: pacientes_actualizados_queue
+      Jwt__Key: "ArthurCurry.Aquaman.12_HalJordan.LinternaVerde.6"
+      Jwt__Issuer: "OAuthJWT"
+      Jwt__Audience: "ApiClinica"
+      Jwt__ExpireMinutes: 60
     depends_on:
       rabbitmq:
         condition: service_healthy
     networks:
       - distribuidos-network
 
-  # ==========================================
-  # API GATEWAY (YARP)
-  # ==========================================
   apigateway:
     build:
       context: ./api-gateway
@@ -88,9 +103,11 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://+:8080"
+      ReverseProxy__Clusters__oauthjwt-cluster__Destinations__destination1__Address: "http://oauthjwt:8080/"
       ReverseProxy__Clusters__pacientes-cluster__Destinations__destination1__Address: "http://paciente:8080/"
       ReverseProxy__Clusters__historiales-cluster__Destinations__destination1__Address: "http://historial:8080/"
     depends_on:
+      - oauthjwt
       - paciente
       - historial
     networks:

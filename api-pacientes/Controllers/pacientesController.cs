@@ -1,6 +1,7 @@
 ﻿using api_pacientes.Data;
 using api_pacientes.Models;
 using api_pacientes.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,7 +22,9 @@ namespace api_pacientes.Controllers
 
         }
 
+
         // METODO: para listar los pacientes
+        [Authorize]
         [HttpGet("")]
         public async Task<ActionResult<IEnumerable<Paciente>>> GetPacientes()
         {
@@ -33,6 +36,7 @@ namespace api_pacientes.Controllers
         }
 
         // METODO: para buscar un paciente por ID
+        [Authorize]
         [HttpGet("{idBuscado}")]
         public async Task<ActionResult<Paciente>> GetPaciente(int idBuscado)
         {
@@ -46,6 +50,7 @@ namespace api_pacientes.Controllers
         }
 
         // METODO: para crear un nuevo paciente
+        [Authorize(Roles = "Administrador")]
         [HttpPost("crear")]
         public async Task<ActionResult<Paciente>> CreaPaciente(Paciente paciente)
         {
@@ -57,6 +62,7 @@ namespace api_pacientes.Controllers
         }
 
         // METODO: actualizar un paciente
+        [Authorize(Roles = "Administrador")]
         [HttpPut("actualizar/{id}")]
         public async Task<IActionResult> ActualizarPaciente(int id, Paciente paciente)
         {
@@ -70,6 +76,7 @@ namespace api_pacientes.Controllers
         }
 
         // METODO: eliminar un paciente
+        [Authorize(Roles = "Administrador")]
         [HttpDelete("{idEliminar}")]
         public async Task<IActionResult> EliminarPaciente(int idEliminar)
         {

@@ -1,5 +1,6 @@
 ﻿using api_historiasClinicas.Data;
 using api_historiasClinicas.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,12 +17,14 @@ namespace api_historiasClinicas.Controllers
             _context = context;
         }
 
-        [HttpGet("historiales")]
+        [Authorize]
+        [HttpGet("")]
         public async Task<ActionResult<IEnumerable<HistorialClinico>>> GetHistoriales()
         {
             return await _context.Historiales.AsNoTracking().ToListAsync();
         }
 
+        [Authorize]
         [HttpGet("paciente/{idPaciente}")]
         public async Task<ActionResult<IEnumerable<HistorialClinico>>> GetPorPaciente(int idPaciente)
         {
@@ -31,6 +34,7 @@ namespace api_historiasClinicas.Controllers
                 .ToListAsync();
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpPost("crear")]
         public async Task<ActionResult<HistorialClinico>> CrearHistorial(HistorialClinico historial)
         {
@@ -39,7 +43,7 @@ namespace api_historiasClinicas.Controllers
             return Ok(historial);
         }
 
-        // METODO: para actualizar/editar un historial clínico
+        [Authorize(Roles = "Administrador")]
         [HttpPut("actualizar/{id}")]
         public async Task<IActionResult> ActualizarHistorial(int id, HistorialClinico historial)
         {
@@ -51,7 +55,7 @@ namespace api_historiasClinicas.Controllers
             return NoContent();
         }
 
-        // METODO: para eliminar un historial clínico
+        [Authorize(Roles = "Administrador")]
         [HttpDelete("{idEliminar}")]
         public async Task<IActionResult> EliminarHistorial(int idEliminar)
         {

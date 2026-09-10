@@ -1,10 +1,12 @@
-
 using api_historiasClinicas.Data;
 using api_historiasClinicas.Models;
 using api_historiasClinicas.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
-namespace apd_apiLibros
+namespace api_historiasClinicas
 {
     public class Program
     {
@@ -12,33 +14,47 @@ namespace apd_apiLibros
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Add services to the container.
-
             builder.Services.AddControllers();
-            // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 
-            builder.Services.AddDbContext<hcDbContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("HCConnection")));
+            builder.Services.AddDbContext<hcDbContext>(options =>
+                options.UseSqlServer(builder.Configuration.GetConnectionString("HCConnection")));
 
-            //builder.Services.AddOpenApi();
+            // --- JWT: validación (mismo Issuer/Audience/Key que OAuthJWT) ---
+            builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                .AddJwtBearer(options =>
+                {
+                    options.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidateAudience = true,
+                        ValidateLifetime = true,
+                        ValidateIssuerSigningKey = true,
+                        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+                        ValidAudience = builder.Configuration["Jwt:Audience"],
+                        IssuerSigningKey = new SymmetricSecurityKey(
+                            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+                    };
+                });
+
+            builder.Services.AddAuthorization();
+            // -----------------------------------------------------------------
 
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
+            builder.Services.AddSwaggerGen(); // opcional: agrégale el SecurityDefinition igual que en api_pacientes
             builder.Services.AddHostedService<RabbitMQConsumer>();
 
             var app = builder.Build();
 
-            // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
-                //app.MapOpenApi();
             }
 
             app.UseHttpsRedirection();
 
+            app.UseAuthentication();   // <-- faltaba, y debe ir ANTES de UseAuthorization
             app.UseAuthorization();
-
 
             app.MapControllers();
 

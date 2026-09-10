@@ -4,9 +4,10 @@
 # ==========================================
 @ApiGateway = http://localhost:5035
 @ContentType = application/json
+@token = 
 
 ### 1. Obtener todos los pacientes (vía Gateway)
-GET {{ApiGateway}}/api/pacientes/pacientes
+GET {{ApiGateway}}/api/pacientes
 Accept: {{ContentType}}
 
 ### 2. Obtener paciente por ID
@@ -24,6 +25,11 @@ Content-Type: {{ContentType}}
   "direccion": "Av. Amazonas y Colón"
 }
 
-### 4. Consultar historiales médicos creados automáticamente por evento
-GET {{ApiGateway}}/api/historiales/paciente/1
-Accept: {{ContentType}}
+
+### 4. login
+POST {{ApiGateway}}/api/Auth/login
+Content-Type: {{ContentType}}
+{
+  "usuario": "admin",
+  "password": "1234"
+}
